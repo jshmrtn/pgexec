@@ -1,7 +1,7 @@
 # pgexec
 
 ```sh
-go install github.com/jshmrtn/pgexec
+go install github.com/jshmrtn/pgexec@latest
 ```
 
 ```sh
