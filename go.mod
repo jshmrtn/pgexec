@@ -1,4 +1,4 @@
-module github.com/lzurbriggen/pgexec
+module github.com/jshmrtn/pgexec
 
 go 1.21.5
 
