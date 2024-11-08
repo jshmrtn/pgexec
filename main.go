@@ -25,6 +25,7 @@ type connArgs struct {
 	password string
 	database string
 	url      string
+	noTx     bool
 }
 
 func main() {
@@ -67,6 +68,11 @@ func main() {
 				Destination: &args.database,
 				Usage:       "Database name",
 			},
+			&cli.BoolFlag{
+				Name:        "no-tx",
+				Destination: &args.noTx,
+				Usage:       "Run without transaction",
+			},
 		},
 		Action: func(cCtx *cli.Context) error {
 			err := execCommand(cCtx.Context, args, cCtx.Args().Get(0))
@@ -105,6 +111,10 @@ func getConnPool(ctx context.Context, connArgs connArgs) (*pgxpool.Pool, error) 
 	})
 }
 
+type Executor interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
+
 func execCommand(ctx context.Context, connArgs connArgs, sql string) error {
 	pool, err := getConnPool(ctx, connArgs)
 	if err != nil {
@@ -112,12 +122,18 @@ func execCommand(ctx context.Context, connArgs connArgs, sql string) error {
 	}
 	defer pool.Close()
 
-	tx, err := pool.Begin(ctx)
-	defer tx.Rollback(ctx)
-	if err != nil {
-		return err
+	var ex Executor
+	if connArgs.noTx {
+		ex = pool
+	} else {
+		tx, err := pool.Begin(ctx)
+		defer tx.Rollback(ctx)
+		if err != nil {
+			return err
+		}
+		ex = tx
 	}
-	res, err := tx.Query(ctx, sql)
+	res, err := ex.Query(ctx, sql)
 	if err != nil {
 		return err
 	}
@@ -142,9 +158,11 @@ func execCommand(ctx context.Context, connArgs connArgs, sql string) error {
 	}
 	t.Render()
 
-	err = tx.Commit(ctx)
-	if err != nil {
-		return err
+	if tx, ok := ex.(pgx.Tx); ok {
+		err = tx.Commit(ctx)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
